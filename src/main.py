@@ -1,6 +1,7 @@
 """Shell emulator module: Stage 1 REPL."""
 
 import getpass
+import shlex
 import socket
 import tkinter as tk
 from tkinter import scrolledtext
@@ -8,6 +9,10 @@ from typing import Callable, Dict, List, Tuple
 
 WINDOW_WIDTH = 80
 WINDOW_HEIGHT = 20
+
+
+class ParseError(Exception):
+    """Raised when a command line cannot be parsed."""
 
 
 def get_prompt_data() -> str:
@@ -21,8 +26,18 @@ def get_prompt_data() -> str:
 
 
 def parse_line(line: str) -> Tuple[str, List[str]]:
-    """Split a line into command and arguments by spaces."""
-    parts = line.strip().split()
+    """Split a line into command and arguments.
+
+    Supports both unquoted and quoted arguments.
+    Raises ParseError if a quotation mark is not closed.
+    """
+    stripped = line.strip()
+    if not stripped:
+        return "", []
+    try:
+        parts = shlex.split(stripped, posix=True)
+    except ValueError as exc:
+        raise ParseError("незакрытая кавычка") from exc
     if not parts:
         return "", []
     return parts[0], parts[1:]
@@ -78,7 +93,10 @@ class ShellEmulator:
 
     def execute(self, line: str) -> str:
         """Execute a command line and return the result."""
-        cmd, args = parse_line(line)
+        try:
+            cmd, args = parse_line(line)
+        except ParseError as exc:
+            return f"Ошибка: {exc}"
         if not cmd:
             return ""
         if cmd not in self.commands:
