@@ -1,11 +1,15 @@
-"""Shell emulator module: Stage 1 REPL."""
+"""Shell emulator module: Stage 2 configuration."""
 
+import argparse
 import getpass
 import shlex
 import socket
 import tkinter as tk
 from tkinter import scrolledtext
 from typing import Callable, Dict, List, Tuple
+
+from logger import XMLLogger
+from script_runner import run_script
 
 WINDOW_WIDTH = 80
 WINDOW_HEIGHT = 20
@@ -28,8 +32,7 @@ def get_prompt_data() -> str:
 def parse_line(line: str) -> Tuple[str, List[str]]:
     """Split a line into command and arguments.
 
-    Supports both unquoted and quoted arguments.
-    Raises ParseError if a quotation mark is not closed.
+    Supports quoted arguments. Raises ParseError on unclosed quote.
     """
     stripped = line.strip()
     if not stripped:
@@ -58,12 +61,22 @@ def cmd_exit(args: List[str]) -> str:
     return "EXIT"
 
 
-class ShellEmulator:
-    """Graphical shell emulator (Stage 1)."""
+def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(description="Shell emulator")
+    parser.add_argument("--vfs", default="", help="Путь к VFS")
+    parser.add_argument("--log", default="", help="Путь к лог-файлу")
+    parser.add_argument("--script", default="", help="Стартовый скрипт")
+    return parser.parse_args()
 
-    def __init__(self, root: tk.Tk) -> None:
-        """Set up window title and widgets."""
+
+class ShellEmulator:
+    """Graphical shell emulator (Stage 2)."""
+
+    def __init__(self, root: tk.Tk, logger=None) -> None:
+        """Set up window title, logger and widgets."""
         self.root = root
+        self.logger = logger
         self.commands: Dict[str, Callable] = {
             "ls": cmd_ls,
             "cd": cmd_cd,
@@ -84,7 +97,7 @@ class ShellEmulator:
         self.entry.bind("<Return>", self.on_enter)
         self.entry.focus_set()
 
-    def _print(self, text: str) -> None:
+    def print_output(self, text: str) -> None:
         """Append a message to the output area."""
         self.output.configure(state="normal")
         self.output.insert(tk.END, text + "\n")
@@ -96,32 +109,54 @@ class ShellEmulator:
         try:
             cmd, args = parse_line(line)
         except ParseError as exc:
-            return f"Ошибка: {exc}"
+            error = f"Ошибка: {exc}"
+            if self.logger:
+                self.logger.log(line, [], error)
+            return error
         if not cmd:
             return ""
         if cmd not in self.commands:
-            return f"Ошибка: неизвестная команда '{cmd}'"
+            error = f"Ошибка: неизвестная команда '{cmd}'"
+            if self.logger:
+                self.logger.log(cmd, args, error)
+            return error
         try:
-            return self.commands[cmd](args)
+            result = self.commands[cmd](args)
         except Exception as exc:
-            return f"Ошибка выполнения: {exc}"
+            error = f"Ошибка выполнения: {exc}"
+            if self.logger:
+                self.logger.log(cmd, args, error)
+            return error
+        if self.logger:
+            self.logger.log(cmd, args, "")
+        return result
 
     def on_enter(self, event: tk.Event) -> None:
         """Handle Enter key in the input field."""
         line = self.entry.get()
         self.entry.delete(0, tk.END)
-        self._print(f"> {line}")
+        self.print_output(f"> {line}")
         result = self.execute(line)
         if result == "EXIT":
             self.root.destroy()
             return
-        self._print(result)
+        self.print_output(result)
 
 
 def main() -> None:
     """Start the GUI application."""
+    args = parse_args()
+    print("Параметры запуска:")
+    print(f"  VFS:              {args.vfs or '(не задан)'}")
+    print(f"  Лог-файл:         {args.log or '(не задан)'}")
+    print(f"  Стартовый скрипт: {args.script or '(не задан)'}")
+
+    logger = XMLLogger(args.log) if args.log else None
+
     root = tk.Tk()
-    ShellEmulator(root)
+    emulator = ShellEmulator(root, logger)
+    if args.script:
+        root.after(300, lambda: run_script(emulator, args.script))
     root.mainloop()
 
 
