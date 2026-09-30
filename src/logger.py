@@ -2,7 +2,7 @@
 
 import getpass
 import os
-import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as et
 from datetime import datetime
 
 
@@ -17,22 +17,23 @@ class XMLLogger:
         if folder:
             os.makedirs(folder, exist_ok=True)
         if os.path.exists(path):
-            self.tree = ET.parse(path)
+            self.tree = et.parse(path)
             self.root = self.tree.getroot()
         else:
-            self.root = ET.Element("log")
-            self.tree = ET.ElementTree(self.root)
+            self.root = et.Element("log")
+            self.tree = et.ElementTree(self.root)
 
     def log(self, command: str, args: list, error: str = "") -> None:
         """Append one event to the XML log."""
-        event = ET.SubElement(self.root, "event")
-        ET.SubElement(event, "timestamp").text = (
+        event = et.SubElement(self.root, "event")
+        et.SubElement(event, "timestamp").text = (
             datetime.now().isoformat()
         )
-        ET.SubElement(event, "user").text = self.user
-        ET.SubElement(event, "command").text = command
-        ET.SubElement(event, "args").text = " ".join(args)
-        ET.SubElement(event, "error").text = error
+        et.SubElement(event, "user").text = self.user
+        et.SubElement(event, "command").text = command
+        et.SubElement(event, "args").text = " ".join(args)
+        et.SubElement(event, "error").text = error
+        et.indent(self.tree, space="  ")
         self.tree.write(
             self.path, encoding="utf-8", xml_declaration=True
         )
